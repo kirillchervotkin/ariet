@@ -1,0 +1,15 @@
+{
+  "name": "ARIET",
+  "version": "1.0",
+  "author": "Kirill",
+  "description": "ARIET",
+  "type": "feature",
+  "usage": "workout",
+  "modificationTime": 1654707000,
+  "in": [
+    { "name": "timerMs", "source": "Activity/ActivityTimer", "type": "subscribe" }
+  ],
+  "template": [
+    { "name": "t.html" }
+  ]
+}
