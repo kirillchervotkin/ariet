@@ -1,4 +1,4 @@
-<uiView>
+<uiView onActivate="$.subscribe('/Dev/Time/Tick10hz', handleTick);">
   <div id="suuntoplus">
     <div class="sp-title-bg" style="width:100%;height:20%;"></div>
     <div class="sp-title-text sp-t-m p-hc" style="top:5%">ARIET</div>
@@ -15,6 +15,10 @@
 
     <div class="p-hc" style="top:66%;">
       <span id="timeDisplay" class="sp-d-m f-num" style="color:#0F0;">--:--</span>
+    </div>
+
+    <div class="p-hc" style="top:80%;">
+      <span id="segmentsDisplay" class="sp-t-m" style="color:#FFF;">--</span>
     </div>
 
     <userInput>

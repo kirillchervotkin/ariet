@@ -52,14 +52,25 @@ var levelNames = [
   "16.0-1","16.0-2","16.0-3","16.0-4","16.0-5","16.0-6",
   "16.5-1","16.5-2","16.5-3"
 ];
+
 var phaseNames = ["Туда", "Обратно", "Отдых"];
 
-// ------------------------------------------------------------
-// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
-// ------------------------------------------------------------
 var isRunning = false;
 var ourTimeMs = 0;
 var currentIndex = 0;
+var subscriptionActive = false;
+
+// Стартовое количество отрезков
+var remainingSegments = 48;
+
+// Компенсация задержки воспроизведения сигнала
+var SIGNAL_OFFSET_MS = 300;
+
+// Кэш для отображения
+var lastShownSecond = -1;
+var lastShownIndex = -1;
+var lastShownRunning = null;
+var lastShownSegments = -1;
 
 // ------------------------------------------------------------
 // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ФОРМАТИРОВАНИЯ
@@ -77,43 +88,98 @@ var formatTime = function(ms) {
 // ------------------------------------------------------------
 // КОЛБЭКИ
 // ------------------------------------------------------------
+function getUserInterface(input, output) {
+  return { template: 't' };
+}
+
 function onLoad(input, output) {
   isRunning = false;
   ourTimeMs = 0;
   currentIndex = 0;
+  remainingSegments = 48;
+  lastShownSecond = -1;
+  lastShownIndex = -1;
+  lastShownRunning = null;
+  lastShownSegments = -1;
+
+  systemEvent('ARIET: main onLoad');
+
+  if (!subscriptionActive) {
+    subscriptionActive = true;
+    $.subscribe('/Dev/Time/Tick10hz', function() {
+      if (!isRunning) return;
+
+      ourTimeMs += 100;
+
+      while (currentIndex + 1 < timeMs.length
+             && timeMs[currentIndex + 1] - SIGNAL_OFFSET_MS <= ourTimeMs) {
+        currentIndex++;
+        // Двойной сигнал — звук + вибрация, гарантированно работает
+        playIndication('Confirm');
+
+        if (currentIndex > 0 && phaseIdx[currentIndex - 1] === 1) {
+          remainingSegments--;
+          if (remainingSegments < 0) remainingSegments = 0;
+        }
+      }
+
+      // Автостоп после последнего этапа программы
+      if (currentIndex >= timeMs.length - 1 && isRunning) {
+        isRunning = false;
+        lastShownRunning = null;
+      }
+    });
+  }
 }
 
+// Пауза тренировки гасит сигналы.
+function onExercisePause(input, output) {
+  isRunning = false;
+  lastShownRunning = null;
+  systemEvent('ARIET: exercise pause');
+}
+
+// Отображение — вызывается ~1 раз в секунду.
 function evaluate(input, output) {
-  if (isRunning) {
-    ourTimeMs += 1000;
-  }
-
-  while (currentIndex + 1 < timeMs.length && timeMs[currentIndex + 1] <= ourTimeMs) {
-    currentIndex++;
-    if (isRunning) {
-      playIndication("Confirm");
-    }
-  }
-
   var idx = currentIndex;
-  var level = levelNames[levelIdx[idx]];
-  var phase = phaseNames[phaseIdx[idx]];
-  var nextTime = (currentIndex + 1 < timeMs.length) ? timeMs[currentIndex + 1] : timeMs[timeMs.length - 1];
-  var remaining = (currentIndex + 1 < timeMs.length) ? (nextTime - ourTimeMs) : 0;
+  var nextTime = (currentIndex + 1 < timeMs.length)
+    ? timeMs[currentIndex + 1]
+    : timeMs[timeMs.length - 1];
+  var remaining = (currentIndex + 1 < timeMs.length)
+    ? (nextTime - ourTimeMs)
+    : 0;
 
-  setText("#levelDisplay", level);
-  setText("#phaseDisplay", phase);
-  setText("#timeDisplay", formatTime(remaining));
-  setText("#stateDisplay", isRunning ? "▶" : "⏸");
+  if (remaining < 0) remaining = 0;
+
+  var currentSecond = Math.floor(remaining / 1000);
+
+  if (currentSecond !== lastShownSecond
+      || idx !== lastShownIndex
+      || isRunning !== lastShownRunning
+      || remainingSegments !== lastShownSegments) {
+
+    lastShownSecond = currentSecond;
+    lastShownIndex = idx;
+    lastShownRunning = isRunning;
+    lastShownSegments = remainingSegments;
+
+    setText('#levelDisplay', levelNames[levelIdx[idx]]);
+    setText('#phaseDisplay', phaseNames[phaseIdx[idx]]);
+    setText('#timeDisplay', formatTime(remaining));
+    setText('#stateDisplay', isRunning ? '▶' : '⏸');
+    setText('#segmentsDisplay', String(remainingSegments));
+  }
 }
 
+// Кнопка «up» — старт/пауза
 function onEvent(input, output, eventId) {
   if (eventId === 1) {
-    isRunning = !isRunning;
-    playIndication(isRunning ? "StartTimer" : "StopTimer");
-  }
-}
+    if (!isRunning && currentIndex >= timeMs.length - 1) {
+      return;
+    }
 
-function getUserInterface(input, output) {
-  return { template: 't' };
+    isRunning = !isRunning;
+    playIndication(isRunning ? 'StartTimer' : 'StopTimer');
+    lastShownRunning = null;
+  }
 }
